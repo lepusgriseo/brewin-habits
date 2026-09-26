@@ -1,0 +1,242 @@
+/* ============================================================================
+   Brewin Habits — stylesheet
+   Theme-aware via Obsidian CSS variables.
+   ============================================================================ */
+
+/* ── Shared primitives (also used by task-style rows/chips/modals below) ──── */
+.brewin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0 8px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--background-primary);
+}
+.brewin-toolbar button {
+  font-size: var(--font-ui-small);
+  padding: 4px 10px;
+}
+.brewin-context-filter { margin-left: auto; }
+
+.brewin-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 4px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.brewin-count {
+  font-size: 0.85em;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  text-transform: none;
+}
+.brewin-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 32px 12px;
+  font-size: var(--font-ui-small);
+}
+.brewin-empty-small { color: var(--text-muted); font-size: var(--font-ui-smaller); padding: 4px 2px 8px; }
+.brewin-hidden { display: none !important; }
+.brewin-disabled { opacity: 0.45; pointer-events: none; }
+.brewin-task-link { cursor: pointer; }
+.brewin-task-link:hover { color: var(--text-accent); text-decoration: underline; }
+.brewin-icon-btn {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--text-muted);
+}
+.brewin-icon-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.brewin-expander {
+  cursor: pointer;
+  color: var(--text-muted);
+  width: 14px;
+  flex: 0 0 auto;
+  user-select: none;
+}
+.brewin-expander:hover { color: var(--text-normal); }
+
+/* ── Habit / reward modals ──────────────────────────────────────────────── */
+.brewin-capture-title {
+  width: 100%;
+  font-size: 1.15em;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+}
+.brewin-chip, .brewin-chip-mini {
+  cursor: pointer;
+  border-radius: 14px;
+  padding: 4px 12px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  font-size: var(--font-ui-smaller);
+}
+.brewin-chip:hover, .brewin-chip-mini:hover { background: var(--background-modifier-hover); }
+.brewin-chip-set { background: var(--interactive-accent); color: var(--text-on-accent); border-color: transparent; }
+.brewin-chip-disabled { opacity: 0.45; cursor: not-allowed; }
+.brewin-capture-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+
+/* ── Habits ──────────────────────────────────────────────────────────────── */
+.brewin-habits { padding: 8px 12px; overflow-y: auto; }
+.brewin-habit-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+.brewin-habit-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.brewin-habit-titlewrap { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.brewin-habit-title { font-weight: 600; }
+.brewin-habit-streak { font-size: var(--font-ui-smaller); color: var(--text-muted); white-space: nowrap; }
+.brewin-habit-ctrl { display: flex; align-items: center; gap: 8px; }
+.brewin-habit-check {
+  cursor: pointer;
+  border-radius: 14px;
+  padding: 4px 14px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  font-size: var(--font-ui-small);
+}
+.brewin-habit-check.done { background: var(--interactive-accent); color: var(--text-on-accent); border-color: transparent; }
+.brewin-habit-count { min-width: 96px; text-align: center; font-variant-numeric: tabular-nums; font-size: var(--font-ui-small); }
+.brewin-habit-step {
+  cursor: pointer;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  font-size: 1.05em;
+  line-height: 1;
+  padding: 0;
+}
+.brewin-habit-step:hover { background: var(--background-modifier-hover); }
+
+.brewin-heatmap { display: flex; gap: 3px; margin-top: 10px; overflow-x: auto; padding-bottom: 2px; }
+.brewin-heat-col { display: flex; flex-direction: column; gap: 3px; }
+.brewin-heat-cell { width: 13px; height: 13px; border-radius: 3px; background: var(--background-modifier-border); }
+.brewin-heat-cell.notdue { background: transparent; box-shadow: inset 0 0 0 1px var(--background-modifier-border); opacity: 0.5; }
+.brewin-heat-cell.future { background: transparent; }
+.brewin-heat-cell.lvl0 { background: var(--background-modifier-border); }
+.brewin-heat-cell.lvl1 { background: color-mix(in srgb, var(--interactive-accent) 30%, var(--background-modifier-border)); }
+.brewin-heat-cell.lvl2 { background: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border)); }
+.brewin-heat-cell.lvl3 { background: color-mix(in srgb, var(--interactive-accent) 78%, var(--background-modifier-border)); }
+.brewin-heat-cell.lvl4 { background: var(--interactive-accent); }
+/* A vice over its allowance — a state, not a magnitude, so it gets the error colour */
+.brewin-heat-cell.breach { background: var(--text-error); }
+/* Past cells open the back-fill dialog for that day */
+.brewin-heat-cell.brewin-heat-click { cursor: pointer; }
+.brewin-heat-cell.brewin-heat-click:hover { box-shadow: inset 0 0 0 1px var(--text-normal); }
+.brewin-habit-pastbtn { font-size: 0.95em; }
+
+/* ── Log-a-past-day modal ── */
+.brewin-logday-row { display: flex; align-items: center; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
+.brewin-logday-row label { color: var(--text-muted); }
+.brewin-logday-row input[type="number"] { width: 110px; }
+.brewin-logday-unit { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.brewin-logday-note:empty { display: none; }
+.brewin-logday-note { margin-top: -4px; }
+
+/* ── Vices ── */
+.brewin-vices-header { color: var(--text-muted); }
+.brewin-vice-card { border-left: 3px solid color-mix(in srgb, var(--text-error) 55%, var(--background-modifier-border)); }
+.brewin-vice-breach {
+  font-size: var(--font-ui-smaller); font-weight: 600;
+  color: var(--text-on-accent); background: var(--text-error);
+  border-radius: 8px; padding: 0 7px;
+}
+.brewin-habit-check.breach { background: var(--text-error); color: var(--text-on-accent); border-color: transparent; }
+.brewin-habit-count.breach { color: var(--text-error); font-weight: 700; }
+
+/* ── Habit rewards ───────────────────────────────────────────────────────── */
+.brewin-rewards {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  padding: 10px 12px;
+  margin: 0 0 12px;
+}
+.brewin-rewards-head { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.brewin-rewards-head h4 { margin: 0; flex: 1; }
+.brewin-rewards-points {
+  font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--text-accent);
+}
+.brewin-rewards.is-collapsed .brewin-rewards-head { margin-bottom: 0; }
+.brewin-rewards-chance {
+  margin: 6px 0 10px;
+  font-size: var(--font-ui-smaller); color: var(--text-muted);
+}
+.brewin-rewards-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.brewin-rewards-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px; border-radius: 6px;
+  background: var(--background-primary);
+}
+.brewin-rewards-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.brewin-rewards-cost { color: var(--text-muted); font-variant-numeric: tabular-nums; font-size: var(--font-ui-smaller); }
+.brewin-rewards-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.brewin-rewards-history { margin-top: 6px; border-top: 1px solid var(--background-modifier-border); padding-top: 6px; }
+.brewin-rewards-history-label {
+  font-size: var(--font-ui-smaller); text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--text-muted); margin-bottom: 4px;
+}
+.brewin-rewards-history-row { font-size: var(--font-ui-smaller); padding: 1px 0; color: var(--text-muted); }
+.brewin-rewards-history-row.won { color: var(--text-accent); }
+.brewin-rewards-history-row.lost { opacity: 0.75; }
+
+/* ── Analytics heatmap ──────────────────────────────────────────────────── */
+.brewin-analytics { padding: 8px 12px; overflow-x: auto; }
+.brewin-hm { display: inline-block; min-width: min-content; }
+.brewin-hm-months { display: flex; gap: 3px; margin-bottom: 4px; }
+.brewin-hm-month {
+  width: 13px; flex: 0 0 13px;
+  font-size: 0.62em; color: var(--text-muted);
+  white-space: nowrap; overflow: visible;
+}
+.brewin-hm-body { display: flex; gap: 3px; }
+.brewin-hm-col { display: flex; flex-direction: column; gap: 3px; }
+.brewin-hm-cell {
+  width: 13px; height: 13px; border-radius: 3px;
+  background: var(--background-modifier-border);
+  flex: 0 0 auto;
+}
+/* Sequential ramp, one hue light→dark — magnitude, not identity */
+.brewin-hm-cell.empty { background: transparent; box-shadow: inset 0 0 0 1px var(--background-modifier-border); }
+.brewin-hm-cell.future { background: transparent; }
+.brewin-hm-cell.pad { background: transparent; }
+.brewin-hm-cell.lvl0 { background: var(--background-modifier-border); }
+.brewin-hm-cell.lvl1 { background: color-mix(in srgb, var(--interactive-accent) 30%, var(--background-modifier-border)); }
+.brewin-hm-cell.lvl2 { background: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border)); }
+.brewin-hm-cell.lvl3 { background: color-mix(in srgb, var(--interactive-accent) 78%, var(--background-modifier-border)); }
+.brewin-hm-cell.lvl4 { background: var(--interactive-accent); }
+/* A breach is a STATE, so it uses the error colour rather than a ramp step */
+.brewin-hm-cell.breach { background: var(--text-error); }
+
+.brewin-hm-legend {
+  display: flex; align-items: center; gap: 5px;
+  margin-top: 12px;
+  font-size: var(--font-ui-smaller); color: var(--text-muted);
+}
+.brewin-hm-legend-item { display: inline-flex; align-items: center; gap: 5px; margin-left: 14px; }
+.brewin-hm-stats { margin-top: 8px; font-size: var(--font-ui-smaller); color: var(--text-muted); }

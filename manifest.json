@@ -1,0 +1,9 @@
+{
+  "id": "brewin-habits",
+  "name": "Brewin Habits",
+  "version": "1.3.0",
+  "minAppVersion": "1.4.0",
+  "description": "First-party habit tracker: build habits and vices, streaks, a year heatmap, and a points-based reward economy with a chance-based cash-in, now also docked by cross-plugin backlog.",
+  "author": "lepusalbus",
+  "isDesktopOnly": false
+}
