@@ -8,17 +8,22 @@
 //
 // Award/claw-back is TRANSITION-based throughout (compare before vs. after), not state-based —
 // that's what makes marking a habit and then unmarking it net to zero rather than an exploit.
+// For that to hold exactly, the balance is NOT floored at zero on a claw-back: flooring made
+// "undo near zero, then redo" mint up to a completion's worth of points from nothing. Spending
+// still can't take it below zero (resolveCashIn refuses), so a negative balance only ever means
+// "points were earned, spent, and then the habits that earned them were unmarked".
 
-import { isDueOn, isSatisfied, isVice, valueOn } from "./habit";
+import { isBreach, isDueOn, isSatisfied, isVice } from "./habit";
 import { Habit, Redemption, RewardsState } from "./types";
 
 const MAX_REDEMPTIONS = 20;
 
-/** How many DISTINCT vices have any slip logged today. One vice hammered repeatedly (a
- *  count-type habit incremented several times) still only counts once — the penalty is for
- *  "how many different vices", not "how much of one". */
+/** How many DISTINCT vices went over their allowance on `dateISO`. Use within an allowance is not
+ *  a slip (two coffees against an allowance of two is a clean day), and one vice hammered
+ *  repeatedly still only counts once — the penalty is for "how many different vices", not "how
+ *  much of one". For an abstain-completely vice (allowance 0) any use is over. */
 export function vicesSlippedOn(habits: Habit[], dateISO: string): number {
-  return habits.filter((h) => h.active && isVice(h) && valueOn(h, dateISO) > 0).length;
+  return habits.filter((h) => h.active && isVice(h) && isBreach(h, dateISO)).length;
 }
 
 /** Today's cash-in success chance (a percentage, 0–100), floored so it's never zero. */
@@ -55,7 +60,7 @@ export function applyCompletionTransition(
 ): RewardsState {
   if (wasSatisfied === isSatisfiedNow) return state;
   const delta = isSatisfiedNow ? pointsPerCompletion : -pointsPerCompletion;
-  return { ...state, points: Math.max(0, state.points + delta) };
+  return { ...state, points: state.points + delta };
 }
 
 /**
@@ -70,11 +75,39 @@ export function syncPerfectDay(state: RewardsState, dateISO: string, isPerfect: 
   if (!isPerfect && already) {
     return {
       ...state,
-      points: Math.max(0, state.points - bonus),
+      points: state.points - bonus,
       perfectDays: state.perfectDays.filter((d) => d !== dateISO),
     };
   }
   return state;
+}
+
+/**
+ * Settle the reward state after ONE habit changed on `dateISO`. `before`/`after` are that habit
+ * either side of the write; `allHabits` is the full list with `after` already in it, for the
+ * perfect-day check.
+ *
+ * Only BUILD habits earn per-completion points. A vice never docks points directly: a slip costs
+ * you through the cash-in chance (vicesSlippedOn) and by breaking the perfect day, and that is the
+ * whole of it. Due-ness is folded into "satisfied" — nothing is earned or lost for a day the habit
+ * wasn't due.
+ */
+export function settleHabitAction(
+  state: RewardsState,
+  before: Habit,
+  after: Habit,
+  allHabits: Habit[],
+  dateISO: string,
+  pointsPerCompletion: number,
+  perfectDayBonus: number
+): RewardsState {
+  let next = state;
+  if (!isVice(after)) {
+    const wasSatisfied = isDueOn(before, dateISO) && isSatisfied(before, dateISO);
+    const isSatisfiedNow = isDueOn(after, dateISO) && isSatisfied(after, dateISO);
+    next = applyCompletionTransition(next, wasSatisfied, isSatisfiedNow, pointsPerCompletion);
+  }
+  return syncPerfectDay(next, dateISO, isPerfectDay(allHabits, dateISO), perfectDayBonus);
 }
 
 /**

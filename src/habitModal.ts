@@ -26,6 +26,7 @@ export class HabitModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
+    this.modalEl.addClass("brewin-habits-modal");
     contentEl.createEl("h3", { text: "New habit" });
 
     const titleInput = contentEl.createEl("input", { type: "text", cls: "brewin-capture-title", placeholder: "Habit name (e.g. Drink water)" });
@@ -70,7 +71,8 @@ export class HabitModal extends Modal {
     );
 
     const targetSetting = new Setting(countSettings);
-    const targetInput = targetSetting.controlEl.createEl("input", { type: "number" });
+    // A text field with a numeric keypad, not type=number — on iOS that zooms the page on focus.
+    const targetInput = targetSetting.controlEl.createEl("input", { type: "text", attr: { inputmode: "numeric" } });
     targetInput.value = String(this.target);
     targetInput.addEventListener("input", () => {
       const n = Number(targetInput.value);
@@ -79,9 +81,10 @@ export class HabitModal extends Modal {
     });
 
     new Setting(countSettings).setName("Unit").addText((t) => t.setPlaceholder("ml, g, cigarettes…").onChange((v) => (this.unit = v.trim())));
-    new Setting(countSettings).setName("Step per tap").addText((t) =>
-      t.setValue(String(this.step)).onChange((v) => (this.step = Math.max(1, Number(v) || 1)))
-    );
+    new Setting(countSettings).setName("Step per tap").addText((t) => {
+      t.inputEl.inputMode = "numeric";
+      t.setValue(String(this.step)).onChange((v) => (this.step = Math.max(1, Number(v) || 1)));
+    });
 
     renderKind = () => {
       const vice = this.polarity === "avoid";

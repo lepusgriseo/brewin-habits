@@ -6,6 +6,7 @@ import {
   isBacklogBlocked,
   isPerfectDay,
   resolveCashIn,
+  settleHabitAction,
   syncPerfectDay,
   todaysChance,
   vicesSlippedOn,
@@ -89,8 +90,19 @@ test("no transition, no change", () => {
   assert.equal(applyCompletionTransition(s, false, false, 5).points, 10);
 });
 
-test("claw-back never takes points negative", () => {
-  const s = applyCompletionTransition(state({ points: 2 }), true, false, 5);
+test("claw-back is the exact inverse of the award, even below zero", () => {
+  let s = applyCompletionTransition(state({ points: 2 }), true, false, 5);
+  assert.equal(s.points, -3);
+  s = applyCompletionTransition(s, false, true, 5);
+  assert.equal(s.points, 2);
+});
+
+test("undo then redo near zero can't mint points (a zero floor used to hand out the difference)", () => {
+  let s = state({ points: 0 });
+  for (let i = 0; i < 3; i++) {
+    s = applyCompletionTransition(s, true, false, 5); // unmark
+    s = applyCompletionTransition(s, false, true, 5); // mark again
+  }
   assert.equal(s.points, 0);
 });
 
@@ -112,11 +124,13 @@ test("the perfect-day bonus fires once per date and reverses if undone", () => {
   assert.deepEqual(s.perfectDays, []);
 });
 
-test("syncPerfectDay never takes points negative even if the bonus was already spent", () => {
+test("syncPerfectDay takes back exactly the bonus, even if it was already spent", () => {
   let s = state({ points: 20, perfectDays: [TODAY] });
   s = { ...s, points: 5 }; // spent most of it on a reward in between
   s = syncPerfectDay(s, TODAY, false, 20);
-  assert.equal(s.points, 0);
+  assert.equal(s.points, -15);
+  s = syncPerfectDay(s, TODAY, true, 20);
+  assert.equal(s.points, 5);
 });
 
 // ── resolveCashIn ─────────────────────────────────────────────────────────────
@@ -193,4 +207,51 @@ test("resolveCashIn keeps redemption history capped, most-recent-first", () => {
   }
   assert.equal(s.redemptions.length, 20);
   assert.equal(s.redemptions[0].date, "2026-08-25"); // the most recent one is first
+});
+
+// ── vices within an allowance ─────────────────────────────────────────────────
+
+test("vicesSlippedOn counts a vice only once it goes OVER its allowance", () => {
+  const within = mk({ title: "Coffee", polarity: "avoid", kind: "count", target: 2, log: { [TODAY]: 2 } });
+  const over = mk({ title: "Sugar", polarity: "avoid", kind: "count", target: 1, log: { [TODAY]: 2 } });
+  const abstain = mk({ title: "Smoking", polarity: "avoid", kind: "count", target: 0, log: { [TODAY]: 1 } });
+  assert.equal(vicesSlippedOn([within, over, abstain], TODAY), 2);
+});
+
+// ── settleHabitAction ─────────────────────────────────────────────────────────
+
+test("settleHabitAction: completing a due build habit earns its points", () => {
+  const before = mk({ title: "Read", log: {} });
+  const after = mk({ title: "Read", log: { [TODAY]: 1 } });
+  const other = mk({ title: "Run", path: "Habits/run.md", log: {} }); // still unmet → no perfect day
+  const s = settleHabitAction(state(), before, after, [after, other], TODAY, 5, 20);
+  assert.equal(s.points, 5);
+  assert.deepEqual(s.perfectDays, []);
+});
+
+test("settleHabitAction: the last due habit done also lands the perfect-day bonus", () => {
+  const before = mk({ title: "Read", log: {} });
+  const after = mk({ title: "Read", log: { [TODAY]: 1 } });
+  const done = mk({ title: "Run", path: "Habits/run.md", log: { [TODAY]: 1 } });
+  const s = settleHabitAction(state(), before, after, [after, done], TODAY, 5, 20);
+  assert.equal(s.points, 25);
+  assert.deepEqual(s.perfectDays, [TODAY]);
+});
+
+test("settleHabitAction: a vice slip never docks per-completion points, only the perfect day", () => {
+  const read = mk({ title: "Read", log: { [TODAY]: 1 } });
+  const clean = mk({ title: "Smoking", path: "Habits/s.md", polarity: "avoid", target: 0, log: {} });
+  const slipped = { ...clean, log: { [TODAY]: 1 } };
+  let s = state({ points: 25, perfectDays: [TODAY] });
+  s = settleHabitAction(s, clean, slipped, [read, slipped], TODAY, 5, 20);
+  assert.equal(s.points, 5); // only the 20-point bonus goes; no 5-point "completion" claw-back
+  assert.deepEqual(s.perfectDays, []);
+});
+
+test("settleHabitAction: nothing is earned for a day the habit wasn't due", () => {
+  const weekly = { cadence: "FREQ=WEEKLY;BYDAY=MO", created: "2026-01-05" }; // TODAY is a Saturday
+  const before = mk({ title: "Review", ...weekly, log: {} });
+  const after = mk({ title: "Review", ...weekly, log: { [TODAY]: 1 } });
+  const s = settleHabitAction(state(), before, after, [after], TODAY, 5, 20);
+  assert.equal(s.points, 0);
 });

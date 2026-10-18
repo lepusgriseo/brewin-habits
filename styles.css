@@ -31,7 +31,6 @@
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-muted);
-  cursor: pointer;
   user-select: none;
 }
 .brewin-count {
@@ -147,12 +146,31 @@
 /* Past cells open the back-fill dialog for that day */
 .brewin-heat-cell.brewin-heat-click { cursor: pointer; }
 .brewin-heat-cell.brewin-heat-click:hover { box-shadow: inset 0 0 0 1px var(--text-normal); }
-.brewin-habit-pastbtn { font-size: 0.95em; }
+.brewin-habit-more { font-size: 1.1em; line-height: 1; }
+.brewin-heat-cell.brewin-heat-click:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 1px; }
+
+/* Phones: cells big enough to tap (16 weeks still fit a 360px screen), and 16px text in the
+   plugin's dialogs — anything smaller and iOS zooms the page when a field is focused. */
+.is-phone .brewin-heat-cell { width: 16px; height: 16px; }
+.is-phone .brewin-habits-modal input[type="text"],
+.is-phone .brewin-habits-modal input[type="date"] { font-size: 16px; }
+
+/* ── Paused habits ── */
+.brewin-paused-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; }
+.brewin-paused-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 10px; border-radius: 8px;
+  border: 1px dashed var(--background-modifier-border);
+  color: var(--text-muted);
+}
+.brewin-paused-title { min-width: 0; overflow-wrap: anywhere; }
 
 /* ── Log-a-past-day modal ── */
 .brewin-logday-row { display: flex; align-items: center; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
 .brewin-logday-row label { color: var(--text-muted); }
-.brewin-logday-row input[type="number"] { width: 110px; }
+/* Two classes + attribute: Obsidian's `.is-mobile input[type='text'] { width: 100% }` otherwise
+   stretches the amount box across the dialog and pushes the unit onto its own line. */
+.brewin-habits-modal .brewin-logday-row input[type="text"] { width: 110px; }
 .brewin-logday-unit { color: var(--text-muted); font-size: var(--font-ui-smaller); }
 .brewin-logday-note:empty { display: none; }
 .brewin-logday-note { margin-top: -4px; }
@@ -182,6 +200,13 @@
   font-weight: 700; font-variant-numeric: tabular-nums;
   color: var(--text-accent);
 }
+/* Today's odds beside the balance, so the folded box still says what a cash-in would face */
+.brewin-rewards-odds {
+  font-size: var(--font-ui-smaller); font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border); border-radius: 8px; padding: 0 6px;
+}
+.brewin-rewards-odds.is-blocked { border-color: transparent; }
 .brewin-rewards.is-collapsed .brewin-rewards-head { margin-bottom: 0; }
 .brewin-rewards-chance {
   margin: 6px 0 10px;

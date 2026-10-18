@@ -10,14 +10,20 @@ An Obsidian plugin that tracks habits and vices as notes, and pays you in points
   question with a real answer, and a missed day is only missed if it was due.
 - **Streaks and a heatmap.** For a vice the streak counts consecutive *clean* days, which is the
   number worth having. Past cells in the heatmap are clickable: tapping one back-fills that day.
-- **A points economy.** Completing a due habit earns points, a perfect day earns a bonus, and both
-  are clawed back if you undo the completion. Points are spent attempting to cash in a reward you
-  define — and the attempt is **chance-based**: every vice slipped today lowers the odds, and the
-  points are spent whether the attempt wins or loses. The odds and the stake are always stated
-  before the confirmation.
-- **Cross-plugin backlog.** Falling behind elsewhere also lowers the odds: unmet habits, plus
-  overdue tasks from Brewin Planner and missed sessions from Brewin Fitness, read from sibling notes
-  in a shared folder. Past a threshold a cash-in is refused outright. All of it can be switched off.
+- **Pausing.** A habit you've set aside can be paused from its card's ⋯ menu: it stops being due,
+  can't be missed, and drops out of the backlog, but keeps its history and stays listed under
+  *Paused* to resume.
+- **A points economy.** Completing a due habit earns points, a perfect day (every due habit done,
+  every vice within its allowance) earns a bonus, and undoing either takes back exactly what it gave
+  — so the balance can dip below zero if you unmark habits whose points you've spent. A vice never
+  costs points directly. Points are spent attempting to cash in a reward you define, and the attempt
+  is **chance-based**: every vice over its allowance today lowers the odds, and the points are spent
+  whether the attempt wins or loses. The odds and the stake are always stated before the
+  confirmation.
+- **Cross-plugin backlog.** Falling behind also lowers the odds: each build habit that missed a due
+  day in the last week (counted once, and never for today, which is still open), plus overdue tasks
+  from Brewin Planner and missed sessions from Brewin Fitness, read from sibling notes in a shared
+  folder. Past a threshold a cash-in is refused outright. All of it can be switched off.
 - **Weekly review.** A command writes a frozen summary of the week's habits into the review note.
 
 ## The notes it reads
@@ -51,6 +57,10 @@ Settings cover the habits folder, the first day of the week, the heatmap length,
 (per completion, perfect-day bonus, base chance, penalty per vice, minimum chance) and the
 cross-plugin backlog (folder, window, penalty per item, hard-block threshold, and an off switch).
 
+The plugin writes `Habits Backlog.md` in the accountability folder: `habits_behind` (the backlog
+figure above, which Brewin Planner's digest reports), plus `due_unmet_count` and `backlog_days` for
+information.
+
 ## Installing
 
 Not in the community directory. Install from this repository with
@@ -66,8 +76,13 @@ npm run build    # type-check, then bundle
 npm test
 ```
 
-The habit model, RRULE handling, analytics and reward arithmetic are pure modules with no Obsidian
-imports; the stores, views and modals are not unit-tested.
+The habit model, RRULE handling, analytics, backlog and reward arithmetic are pure modules with no
+Obsidian imports; the stores, views and modals are not unit-tested.
+
+Every write is a read-modify-write of the note's own frontmatter inside one `processFrontMatter`
+call, and the stores serve what they just wrote until Obsidian's metadata cache catches up. Reading
+back through the cache straight after a write sees the old value, which is how 1.3.0 never awarded
+points and dropped quick repeat taps.
 
 ## Caveats
 

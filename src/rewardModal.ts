@@ -15,6 +15,7 @@ export class RewardModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
+    this.modalEl.addClass("brewin-habits-modal");
     contentEl.createEl("h3", { text: this.existing ? "Edit reward" : "New reward" });
 
     const nameInput = contentEl.createEl("input", {
@@ -29,12 +30,13 @@ export class RewardModal extends Modal {
     new Setting(contentEl)
       .setName("Cost")
       .setDesc("Points needed to attempt cashing this in.")
-      .addText((t) =>
+      .addText((t) => {
+        t.inputEl.inputMode = "numeric";
         t.setValue(String(this.cost)).onChange((v) => {
           const n = Number(v);
           this.cost = Number.isFinite(n) && n >= 1 ? Math.round(n) : 1;
-        })
-      );
+        });
+      });
 
     const btns = contentEl.createDiv({ cls: "brewin-capture-buttons" });
     btns.createEl("button", { text: "Cancel" }).addEventListener("click", () => this.close());

@@ -14,7 +14,21 @@ export interface NewHabitFields {
   step: number;
 }
 
+/** What one write changed: the habit as the file had it just before, and just after. */
+export interface HabitChange {
+  before: Habit;
+  after: Habit;
+}
+
 export class HabitStore {
+  /**
+   * Values this store has just written, keyed by path. Obsidian's metadata cache re-indexes a file
+   * some time AFTER a write resolves, so a read straight after a tap would still see the old log —
+   * which is how taps once earned no points and a quick second ＋ overwrote the first. Reads apply
+   * these until the cache reports the file changed (`forget`), at which point the cache is current.
+   */
+  private written = new Map<string, Partial<Pick<Habit, "log" | "active">>>();
+
   constructor(private app: App, private settings: BrewinHabitsSettings) {}
 
   getHabits(): Habit[] {
@@ -26,9 +40,15 @@ export class HabitStore {
       const fm = (cache?.frontmatter ?? {}) as Record<string, unknown>;
       const tags = tagList(fm, cache);
       if (!tags.includes(HABIT_TAG)) continue;
-      out.push(habitFromFrontmatter(fm, file.path, file.basename));
+      const habit = habitFromFrontmatter(fm, file.path, file.basename);
+      out.push({ ...habit, ...this.written.get(file.path) });
     }
     return out.sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  /** The metadata cache has caught up with `path` (or it was deleted/renamed) — trust it again. */
+  forget(path: string): void {
+    this.written.delete(path);
   }
 
   getByPath(path: string): Habit | null {
@@ -81,25 +101,36 @@ export class HabitStore {
     return f instanceof TFile ? f : null;
   }
 
-  private async persistLog(habit: Habit, log: Record<string, number>): Promise<void> {
+  /**
+   * Read-modify-write one habit's log against the FILE's current frontmatter, inside the same
+   * `processFrontMatter` call that writes it — never against a possibly-stale cached copy. Returns
+   * the habit as it was before and after, for the reward engine to settle.
+   */
+  private async applyLog(habit: Habit, change: (current: Habit) => Record<string, number>): Promise<HabitChange | null> {
     const file = this.fileFor(habit);
-    if (!file) return;
+    if (!file) return null;
+    let result = null as HabitChange | null;
     await this.app.fileManager.processFrontMatter(file, (fm) => {
+      const before = habitFromFrontmatter(fm as Record<string, unknown>, file.path, file.basename);
+      const log = change(before);
       // Write a plain sorted object so the YAML stays tidy.
       const sorted: Record<string, number> = {};
       for (const k of Object.keys(log).sort()) sorted[k] = log[k];
       fm.log = sorted;
       fm.modified = todayISO();
+      result = { before, after: { ...before, log: sorted } };
     });
+    if (result) this.written.set(file.path, { ...this.written.get(file.path), log: result.after.log });
+    return result;
   }
 
-  async mark(habit: Habit, action: "toggle" | "inc" | "dec" | "clear", dateISO = todayISO()): Promise<void> {
-    await this.persistLog(habit, withMarked(habit, dateISO, action));
+  async mark(habit: Habit, action: "toggle" | "inc" | "dec" | "clear", dateISO = todayISO()): Promise<HabitChange | null> {
+    return this.applyLog(habit, (current) => withMarked(current, dateISO, action));
   }
 
   /** Set an absolute value for one day (back-filling a forgotten day). */
-  async setValue(habit: Habit, dateISO: string, value: number): Promise<void> {
-    await this.persistLog(habit, withValue(habit, dateISO, value));
+  async setValue(habit: Habit, dateISO: string, value: number): Promise<HabitChange | null> {
+    return this.applyLog(habit, (current) => withValue(current, dateISO, value));
   }
 
   async setActive(habit: Habit, active: boolean): Promise<void> {
@@ -109,6 +140,7 @@ export class HabitStore {
       fm.active = active;
       fm.modified = todayISO();
     });
+    this.written.set(file.path, { ...this.written.get(file.path), active });
   }
 }
 

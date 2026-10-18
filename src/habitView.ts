@@ -1,25 +1,54 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
-import { currentStreak, heatmapCells, isBreach, isDueOn, isSatisfied, isVice, valueOn } from "./habit";
+import { ItemView, Menu, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { currentStreak, heatmapCells, isBreach, isDueOn, isVice, valueOn } from "./habit";
 import { addDays, formatISO, parseISO, todayISO } from "./dates";
 import { HabitModal } from "./habitModal";
 import { LogDayModal } from "./logDayModal";
 import { RewardModal } from "./rewardModal";
 import { ConfirmModal } from "./confirmModal";
-import { dueUnmetToday, habitBacklogDays, ExternalBacklog } from "./backlog";
+import { habitsBehind, ExternalBacklog } from "./backlog";
 import { isBacklogBlocked } from "./rewards";
 import type BrewinHabitsPlugin from "./main";
+import type { HabitChange } from "./habitStore";
 import { Habit, Reward } from "./types";
 
 export const HABIT_VIEW_TYPE = "brewin-habits";
+
+/** Whether the rewards box is open is remembered per device — a convenience, so storage that
+ *  isn't there (private window, cleared site data) just means it starts folded. */
+const REWARDS_OPEN_KEY = "brewin-habits:rewards-open";
+
+function loadRewardsOpen(): boolean {
+  try {
+    return window.localStorage.getItem(REWARDS_OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveRewardsOpen(open: boolean): void {
+  try {
+    window.localStorage.setItem(REWARDS_OPEN_KEY, open ? "1" : "0");
+  } catch {
+    /* not available — the state just isn't remembered */
+  }
+}
 
 /** Default date for the "log a past day" dialog — the most common thing you forgot. */
 function yesterday(): string {
   return formatISO(addDays(parseISO(todayISO())!, -1));
 }
 
+/** A text-less button: Obsidian's `clickable-icon` styling (transparent, no button chrome — its
+ *  `button:not(.clickable-icon)` rule otherwise paints every button grey) plus a spoken label. */
+function iconButton(parent: HTMLElement, glyph: string, label: string, extraCls = ""): HTMLButtonElement {
+  const b = parent.createEl("button", { text: glyph, cls: `clickable-icon brewin-icon-btn ${extraCls}`.trim() });
+  b.setAttr("aria-label", label);
+  return b;
+}
+
 export class HabitView extends ItemView {
-  /** Session state only — resets to open next time the pane is opened. */
-  private rewardsOpen = true;
+  /** Starts folded: the habits are what you come here to act on, not the catalogue. */
+  private rewardsOpen = loadRewardsOpen();
 
   constructor(leaf: WorkspaceLeaf, private plugin: BrewinHabitsPlugin) {
     super(leaf);
@@ -49,17 +78,21 @@ export class HabitView extends ItemView {
     toolbar.createEl("button", { text: "＋ New habit", cls: "mod-cta" }).addEventListener("click", () => {
       new HabitModal(this.app, this.plugin.habits, () => this.render()).open();
     });
-    toolbar.createEl("button", { text: "⟳" }).addEventListener("click", () => this.render());
+    iconButton(toolbar, "⟳", "Refresh").addEventListener("click", () => this.render());
 
-    const all = this.plugin.habits.getHabits().filter((h) => h.active);
+    const everything = this.plugin.habits.getHabits();
+    const all = everything.filter((h) => h.active);
+    const paused = everything.filter((h) => !h.active);
 
     // Rewards render regardless of whether any habits exist yet — a catalog and a balance can
     // outlive the habits that earned them, and shouldn't disappear along with the last one.
     await this.renderRewards(root, all, today);
 
     if (!all.length) {
-      root.createDiv({ cls: "brewin-empty", text: "No habits yet. Press ＋ New habit." });
-      return;
+      root.createDiv({
+        cls: "brewin-empty",
+        text: paused.length ? "No active habits. Press ＋ New habit, or resume one below." : "No habits yet. Press ＋ New habit.",
+      });
     }
 
     const habits = all.filter((h) => !isVice(h));
@@ -78,11 +111,13 @@ export class HabitView extends ItemView {
       root.createDiv({ cls: "brewin-section-header brewin-vices-header", text: "🚭 Vices" });
       vices.forEach((h) => this.habitCard(root, h, today, isDueOn(h, today)));
     }
+
+    if (paused.length) this.renderPaused(root, paused);
   }
 
   /**
-   * Points balance, today's cash-in chance, the reward catalog, and recent history.
-   * Collapsible the same way Review's Unscheduled section is (▾/▸ header, session-only state).
+   * Points balance, today's cash-in chance, the reward catalog, and recent history. Folded, it is
+   * one line — balance and odds (or 🔒) — so it never pushes the habits off the first screen.
    */
   private async renderRewards(root: HTMLElement, allHabits: Habit[], today: string): Promise<void> {
     const state = await this.plugin.rewards.getState();
@@ -98,12 +133,18 @@ export class HabitView extends ItemView {
     head.createSpan({ cls: "brewin-expander", text: open ? "▾" : "▸" });
     head.createEl("h4", { text: "🎁 Rewards" });
     head.createSpan({ cls: "brewin-rewards-points", text: `${state.points} pts` });
+    head.createSpan({
+      cls: "brewin-rewards-odds" + (blocked ? " is-blocked" : ""),
+      text: blocked ? "🔒" : `${chance}%`,
+      attr: { "aria-label": blocked ? "Cash-in blocked" : `Cash-in chance ${chance}%` },
+    });
     head.setAttr("role", "button");
     head.setAttr("tabindex", "0");
     head.setAttr("aria-expanded", String(open));
     head.setAttr("aria-label", open ? "Collapse rewards" : "Expand rewards");
     const toggle = () => {
       this.rewardsOpen = !this.rewardsOpen;
+      saveRewardsOpen(this.rewardsOpen);
       void this.render();
     };
     head.addEventListener("click", toggle);
@@ -143,13 +184,10 @@ export class HabitView extends ItemView {
       cashBtn.addEventListener("click", () => {
         if (!disabled) this.confirmCashIn(reward, chance, allHabits, ext, today);
       });
-      actions.createEl("button", { text: "✎", cls: "brewin-icon-btn" }).addEventListener("click", () => {
+      iconButton(actions, "✎", `Edit ${reward.name}`).addEventListener("click", () => {
         new RewardModal(this.app, this.plugin.rewards, () => this.render(), reward).open();
       });
-      actions.createEl("button", { text: "🗑", cls: "brewin-icon-btn" }).addEventListener("click", async () => {
-        await this.plugin.rewards.removeReward(reward.name);
-        this.render();
-      });
+      iconButton(actions, "🗑", `Delete ${reward.name}`).addEventListener("click", () => this.confirmRemoveReward(reward));
     }
 
     box.createEl("button", { text: "＋ Add reward", cls: "brewin-chip brewin-chip-mini" }).addEventListener("click", () => {
@@ -187,6 +225,18 @@ export class HabitView extends ItemView {
     }).open();
   }
 
+  private confirmRemoveReward(reward: Reward): void {
+    new ConfirmModal(this.app, {
+      title: "Delete reward?",
+      body: `"${reward.name}" (${reward.cost} pts) will be removed from the catalogue. Your points and past cash-ins are kept.`,
+      cta: "Delete",
+      onConfirm: async () => {
+        await this.plugin.rewards.removeReward(reward.name);
+        this.render();
+      },
+    }).open();
+  }
+
   /** "Backlog: 3 tasks overdue · 1 fitness session missed · 2 habits behind" — the breakdown
    *  behind the chance/block, so the number moving is never a mystery. */
   private backlogLine(allHabits: Habit[], ext: ExternalBacklog, today: string): string {
@@ -194,8 +244,8 @@ export class HabitView extends ItemView {
     if (ext.tasksOverdue) bits.push(`${ext.tasksOverdue} task${ext.tasksOverdue === 1 ? "" : "s"} overdue`);
     if (ext.tasksSlipped) bits.push(`${ext.tasksSlipped} slipped`);
     if (ext.fitnessMissed) bits.push(`${ext.fitnessMissed} fitness session${ext.fitnessMissed === 1 ? "" : "s"} missed`);
-    const habitsBehind = dueUnmetToday(allHabits, today) + habitBacklogDays(allHabits, today, this.plugin.settings.backlogWindowDays);
-    if (habitsBehind) bits.push(`${habitsBehind} habit${habitsBehind === 1 ? "" : "s"} behind`);
+    const behind = habitsBehind(allHabits, today, this.plugin.settings.backlogWindowDays);
+    if (behind) bits.push(`${behind} habit${behind === 1 ? "" : "s"} behind`);
     return `Backlog: ${bits.join(" · ")}`;
   }
 
@@ -219,9 +269,10 @@ export class HabitView extends ItemView {
 
     // Today control
     const ctrl = head.createDiv({ cls: "brewin-habit-ctrl" });
+    const val = valueOn(habit, today);
     if (habit.kind === "binary") {
       // A binary vice logs a slip, so the button's meaning flips.
-      const logged = valueOn(habit, today) > 0;
+      const logged = val > 0;
       const btn = ctrl.createEl("button", {
         cls: "brewin-habit-check" + (logged ? (vice ? " breach" : " done") : ""),
         text: vice ? (logged ? "✗ Slipped" : "Log a slip") : logged ? "✓ Done" : "Mark done",
@@ -229,39 +280,92 @@ export class HabitView extends ItemView {
       if (!vice) btn.toggleClass("brewin-disabled", !dueToday && !logged);
       btn.addEventListener("click", () => this.markAndReward(habit, "toggle"));
     } else {
-      const val = valueOn(habit, today);
-      ctrl.createEl("button", { cls: "brewin-habit-step", text: "−" }).addEventListener("click", () => this.markAndReward(habit, "dec"));
       const unit = habit.unit ? " " + habit.unit : "";
+      const minus = ctrl.createEl("button", { cls: "brewin-habit-step", text: "−" });
+      minus.setAttr("aria-label", `Less ${habit.title}`);
+      // Nothing to take away at zero; and like the yes/no button, a habit that isn't due today
+      // can't be added to (it would earn nothing), only corrected back down.
+      minus.toggleClass("brewin-disabled", val <= 0);
+      minus.addEventListener("click", () => this.markAndReward(habit, "dec"));
       ctrl.createSpan({
         cls: "brewin-habit-count" + (vice && val > habit.target ? " breach" : ""),
-        // For a vice the target is a ceiling, so read it as "used / allowed".
-        text: vice ? `${val} / ${habit.target} max${unit}` : `${val} / ${habit.target}${unit}`,
+        // For a vice the target is a ceiling — say so in words rather than "0 / 0 max".
+        text: vice
+          ? `${val}${unit} today · ${habit.target > 0 ? `${habit.target}${unit} allowed` : "none allowed"}`
+          : `${val} / ${habit.target}${unit}`,
       });
-      ctrl.createEl("button", { cls: "brewin-habit-step", text: "＋" }).addEventListener("click", () => this.markAndReward(habit, "inc"));
+      const plus = ctrl.createEl("button", { cls: "brewin-habit-step", text: "＋" });
+      plus.setAttr("aria-label", `More ${habit.title}`);
+      if (!vice) plus.toggleClass("brewin-disabled", !dueToday);
+      plus.addEventListener("click", () => this.markAndReward(habit, "inc"));
     }
 
-    // Back-fill a past day — the heatmap cells below are also clickable for the same thing.
-    const past = ctrl.createEl("button", { cls: "brewin-icon-btn brewin-habit-pastbtn", text: "📅" });
-    past.setAttr("aria-label", "Log a past day");
-    past.addEventListener("click", () => this.openLogDay(habit, yesterday()));
+    // Everything less frequent than today's tap lives behind one button, so the row stays short
+    // on a phone. The heatmap's past cells are also a shortcut into "log a past day".
+    iconButton(ctrl, "⋯", `More actions for ${habit.title}`, "brewin-habit-more").addEventListener("click", (evt) => {
+      const menu = new Menu();
+      menu.addItem((i) => i.setTitle("Log a past day…").setIcon("calendar").onClick(() => this.openLogDay(habit, yesterday())));
+      menu.addItem((i) => i.setTitle("Pause habit").setIcon("pause").onClick(() => this.confirmPause(habit)));
+      menu.addItem((i) => i.setTitle("Open note").setIcon("file-text").onClick(() => this.openNote(habit.path)));
+      menu.showAtMouseEvent(evt);
+    });
 
     // Heatmap
     this.heatmap(card, habit, today);
   }
 
+  /** Paused habits stop counting as due, missed or behind, and drop out of the cards above — but
+   *  stay listed here so they can be resumed, rather than vanishing. */
+  private renderPaused(root: HTMLElement, paused: Habit[]): void {
+    root.createDiv({ cls: "brewin-section-header", text: "⏸ Paused" });
+    const list = root.createDiv({ cls: "brewin-paused-list" });
+    for (const habit of paused) {
+      const row = list.createDiv({ cls: "brewin-paused-row" });
+      const link = row.createSpan({ cls: "brewin-task-link brewin-paused-title", text: (isVice(habit) ? "🚭 " : "") + habit.title });
+      link.addEventListener("click", () => this.openNote(habit.path));
+      row.createEl("button", { text: "Resume", cls: "brewin-chip brewin-chip-mini" }).addEventListener("click", async () => {
+        await this.plugin.habits.setActive(habit, true);
+        new Notice(`${habit.title} resumed.`);
+        this.render();
+      });
+    }
+  }
+
+  private confirmPause(habit: Habit): void {
+    new ConfirmModal(this.app, {
+      title: `Pause ${habit.title}?`,
+      body:
+        "While paused it isn't due, can't be missed, and doesn't count toward the backlog or a perfect day. " +
+        "Its history is kept, and you can resume it from the Paused list.",
+      cta: "Pause",
+      onConfirm: async () => {
+        await this.plugin.habits.setActive(habit, false);
+        new Notice(`${habit.title} paused.`);
+        this.render();
+      },
+    }).open();
+  }
+
   /**
-   * Mark a habit, then let the rewards store re-check points/perfect-day against the fresh
-   * habit list. Kept as one shared path (rather than repeating this at each of the three mark
-   * call sites) so the two stores can never drift out of sync with each other.
+   * Mark a habit, then let the rewards store settle points/perfect-day against what was actually
+   * written. Kept as one shared path (rather than repeating this at each of the three mark call
+   * sites) so the two stores can never drift out of sync with each other.
    */
   private async markAndReward(habit: Habit, action: "toggle" | "inc" | "dec"): Promise<void> {
-    const before = habit;
     const today = todayISO();
-    await this.plugin.habits.mark(habit, action);
-    const allHabits = this.plugin.habits.getHabits();
-    const after = allHabits.find((h) => h.path === habit.path) ?? habit;
-    await this.plugin.rewards.recordHabitAction(before, after, allHabits, today);
+    const change = await this.plugin.habits.mark(habit, action, today);
+    if (!change) return;
+    await this.settle(change, today);
     this.render();
+  }
+
+  /** Settle rewards for one write. `before`/`after` come from the file itself (never the possibly
+   *  stale cache); the habit list gets `after` substituted so the perfect-day check sees it. */
+  private async settle(change: HabitChange, dateISO: string): Promise<void> {
+    const allHabits = this.plugin.habits
+      .getHabits()
+      .map((h) => (h.path === change.after.path ? { ...h, log: change.after.log } : h));
+    await this.plugin.rewards.recordHabitAction(change.before, change.after, allHabits, dateISO);
   }
 
   private openLogDay(habit: Habit, startDate: string): void {
@@ -274,16 +378,15 @@ export class HabitView extends ItemView {
    * date-parameterised), so points and perfect-day bonuses stay consistent with real history.
    */
   private async logDay(habit: Habit, dateISO: string, value: number): Promise<void> {
-    const before = habit;
-    await this.plugin.habits.setValue(habit, dateISO, value);
-    const allHabits = this.plugin.habits.getHabits();
-    const after = allHabits.find((h) => h.path === habit.path) ?? habit;
-    await this.plugin.rewards.recordHabitAction(before, after, allHabits, dateISO);
+    const change = await this.plugin.habits.setValue(habit, dateISO, value);
+    if (!change) return;
+    await this.settle(change, dateISO);
     new Notice(`${habit.title}: ${dateISO} updated.`);
     this.render();
   }
 
   private heatmap(parent: HTMLElement, habit: Habit, today: string): void {
+    const vice = isVice(habit);
     const wrap = parent.createDiv({ cls: "brewin-heatmap" });
     const cols = heatmapCells(habit, today, this.plugin.settings.heatmapWeeks, this.plugin.settings.firstDayOfWeek);
     for (const col of cols) {
@@ -293,17 +396,28 @@ export class HabitView extends ItemView {
         if (cell.date > today) c.addClass("future");
         else if (!cell.due) c.addClass("notdue");
         else if (cell.breach) c.addClass("breach"); // a vice went over — read as bad, not "progress"
-        else {
+        else if (vice) {
+          // A vice's good day is an untouched one, so clean days get the full colour (a clean run
+          // should look like a streak, not like a gap) and use within an allowance a lighter one.
+          c.addClass(cell.ratio > 0 ? "lvl2" : "lvl4");
+        } else {
           // shade by ratio: 4 buckets
           const lvl = cell.ratio >= 1 ? 4 : cell.ratio >= 0.66 ? 3 : cell.ratio >= 0.33 ? 2 : cell.ratio > 0 ? 1 : 0;
           c.addClass("lvl" + lvl);
         }
-        const state = cell.breach ? " — over the limit" : cell.due && cell.satisfied ? " — ok" : "";
+        const state = cell.breach ? " — over the limit" : cell.due && cell.satisfied ? (vice ? " — clean" : " — done") : "";
         // Past cells double as a shortcut into the back-fill dialog for that exact day.
         if (cell.date <= today) {
           c.addClass("brewin-heat-click");
           c.setAttr("role", "button");
+          c.setAttr("tabindex", "0");
           c.addEventListener("click", () => this.openLogDay(habit, cell.date));
+          c.addEventListener("keydown", (e: KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              this.openLogDay(habit, cell.date);
+            }
+          });
           c.setAttr("aria-label", `Edit ${cell.date}${cell.due ? "" : " (not due)"}${state}`);
         } else {
           c.setAttr("aria-label", `${cell.date}${cell.due ? "" : " (not due)"}${state}`);

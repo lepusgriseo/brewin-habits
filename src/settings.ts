@@ -61,6 +61,26 @@ export class BrewinHabitsSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.createEl("h2", { text: "Brewin Habits" });
 
+    // Whole-number setting clamped to [min, max]; anything else falls back to the default.
+    const rewardNum = (
+      name: string,
+      desc: string,
+      key: keyof BrewinHabitsSettings,
+      min: number,
+      max: number,
+      dflt: number
+    ) =>
+      new Setting(containerEl)
+        .setName(name)
+        .setDesc(desc)
+        .addText((t) =>
+          t.setValue(String(this.plugin.settings[key])).onChange(async (v) => {
+            const n = Number(v);
+            (this.plugin.settings[key] as unknown as number) = Number.isFinite(n) && n >= min && n <= max ? Math.round(n) : dflt;
+            await this.plugin.saveSettings();
+          })
+        );
+
     new Setting(containerEl)
       .setName("Habits folder")
       .setDesc("Where habit notes (and the Rewards note) live.")
@@ -85,38 +105,24 @@ export class BrewinHabitsSettingTab extends PluginSettingTab {
           })
       );
 
+    rewardNum("Heatmap weeks", "How many weeks each habit card's heatmap shows (4–53).", "heatmapWeeks", 4, 53, 16);
+
     containerEl.createEl("h3", { text: "Habit rewards" });
     containerEl.createEl("p", {
       cls: "setting-item-description",
       text:
         "Points build up as habits are completed and spend on cashing in a reward you define " +
-        "from the Habits pane. A vice doesn't dock points directly — it lowers the chance a " +
-        "cash-in actually succeeds, and that cost is real: points are spent on the attempt " +
-        "whether it wins or loses.",
+        "from the Habits pane. A vice never docks points directly — going over its allowance " +
+        "lowers the chance a cash-in succeeds and spoils that day's perfect-day bonus, and that " +
+        "cost is real: points are spent on the attempt whether it wins or loses. Undoing a " +
+        "completion takes back exactly what it gave, so the balance can dip below zero if you " +
+        "unmark habits whose points you've already spent.",
     });
 
-    const rewardNum = (
-      name: string,
-      desc: string,
-      key: keyof BrewinHabitsSettings,
-      min: number,
-      max: number,
-      dflt: number
-    ) =>
-      new Setting(containerEl)
-        .setName(name)
-        .setDesc(desc)
-        .addText((t) =>
-          t.setValue(String(this.plugin.settings[key])).onChange(async (v) => {
-            const n = Number(v);
-            (this.plugin.settings[key] as unknown as number) = Number.isFinite(n) && n >= min && n <= max ? Math.round(n) : dflt;
-            await this.plugin.saveSettings();
-          })
-        );
 
     rewardNum(
       "Points per habit completion",
-      "Awarded when a due habit goes from unsatisfied to satisfied; clawed back if you undo it.",
+      "Awarded when a due habit (not a vice) goes from unsatisfied to satisfied; taken back if you undo it.",
       "pointsPerCompletion",
       0,
       1000,
@@ -133,7 +139,7 @@ export class BrewinHabitsSettingTab extends PluginSettingTab {
     rewardNum("Base cash-in chance (%)", "Success chance for a cash-in attempt with no vices slipped today.", "rewardBaseChance", 1, 100, 90);
     rewardNum(
       "Chance penalty per vice (%)",
-      "How many percentage points the chance drops for each distinct vice slipped today.",
+      "How many percentage points the chance drops for each distinct vice over its allowance today.",
       "rewardChancePenaltyPerVice",
       0,
       100,
@@ -145,9 +151,11 @@ export class BrewinHabitsSettingTab extends PluginSettingTab {
     containerEl.createEl("p", {
       cls: "setting-item-description",
       text:
-        "Falling behind elsewhere also docks the cash-in chance: unmet or missed build habits, " +
-        "plus whatever Brewin Planner (overdue/slipped tasks) and Brewin Fitness (missed " +
-        "sessions) report via their own shared backlog notes.",
+        "Falling behind also docks the cash-in chance: each build habit that missed a due day " +
+        "in the window (counted once, however many days it missed — today never counts, it's " +
+        "still open), plus whatever Brewin Planner (overdue/slipped tasks) and Brewin Fitness " +
+        "(missed sessions) report via their own shared backlog notes. Pause a habit you've set " +
+        "aside so it stops counting.",
     });
 
     new Setting(containerEl)
@@ -172,7 +180,7 @@ export class BrewinHabitsSettingTab extends PluginSettingTab {
 
     rewardNum(
       "Backlog window (days)",
-      "How many trailing days count toward the missed-habit-days part of the backlog.",
+      "How many trailing days a build habit can have missed a due day in and still count as behind.",
       "backlogWindowDays",
       1,
       90,

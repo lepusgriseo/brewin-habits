@@ -51,17 +51,40 @@ export default class BrewinHabitsPlugin extends Plugin {
 
     this.addSettingTab(new BrewinHabitsSettingTab(this.app, this));
 
-    // A habit note (or Rewards.md) edited outside the pane should refresh what's on screen.
-    // Skip our own Habits Backlog.md — otherwise writing it would re-trigger this listener,
-    // recompute it again, write again, forever.
-    const onVaultChange = (file: TAbstractFile) => {
-      if (file.path === this.backlog.notePath) return;
-      this.queueRefresh();
-    };
-    this.registerEvent(this.app.metadataCache.on("changed", onVaultChange));
-    this.registerEvent(this.app.vault.on("create", onVaultChange));
-    this.registerEvent(this.app.vault.on("delete", onVaultChange));
-    this.registerEvent(this.app.vault.on("rename", onVaultChange));
+    // Redraw when something the views show has changed — a habit note, Rewards.md (both in the
+    // habits folder) or a sibling plugin's backlog note — and nothing else. Reacting to every
+    // file in the vault redrew both views on each pause in typing anywhere. Our own Habits
+    // Backlog.md is skipped too: writing it would re-trigger this listener, recompute, write
+    // again, forever.
+    const watched = (path: string): boolean =>
+      path !== this.backlog.notePath &&
+      (path.startsWith(this.settings.habitsFolder + "/") || this.backlog.siblingPaths.includes(path));
+    // "changed" means the cache has caught up with a file, so the stores can stop serving the
+    // values they just wrote and trust it again.
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (file: TFile) => {
+        this.habits.forget(file.path);
+        if (file.path === this.rewards.notePath) this.rewards.forget();
+        if (watched(file.path)) this.queueRefresh();
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("create", (file: TAbstractFile) => {
+        if (watched(file.path)) this.queueRefresh();
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("delete", (file: TAbstractFile) => {
+        this.habits.forget(file.path);
+        if (watched(file.path)) this.queueRefresh();
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
+        this.habits.forget(oldPath);
+        if (watched(file.path) || watched(oldPath)) this.queueRefresh();
+      })
+    );
   }
 
   onunload(): void {
@@ -150,5 +173,7 @@ export default class BrewinHabitsPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+    // Week start, heatmap length and the economy all change what's on screen.
+    this.queueRefresh();
   }
 }

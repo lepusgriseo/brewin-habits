@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { crossPluginBacklogItems, dueUnmetToday, habitBacklogDays } from "../src/backlog.ts";
+import { backlogItemsFor, crossPluginBacklogItems, dueUnmetToday, habitBacklogDays, habitsBehind } from "../src/backlog.ts";
 import { Habit } from "../src/types.ts";
 
 const TODAY = "2026-08-29"; // a Saturday
@@ -77,4 +77,34 @@ test("habitBacklogDays ignores vices and inactive habits", () => {
 test("crossPluginBacklogItems sums everything the sibling plugins report", () => {
   assert.equal(crossPluginBacklogItems({ tasksOverdue: 3, tasksSlipped: 2, fitnessMissed: 1 }), 6);
   assert.equal(crossPluginBacklogItems({ tasksOverdue: 0, tasksSlipped: 0, fitnessMissed: 0 }), 0);
+});
+
+// ── habitsBehind ─────────────────────────────────────────────────────────────
+
+test("habitsBehind counts each build habit once, however many days it missed", () => {
+  const neglected = mk({ title: "Spanish", log: {} }); // missed all 7 days
+  const oneMiss = mk({ title: "Read", path: "Habits/r.md", log: { "2026-08-28": 1, "2026-08-27": 1, "2026-08-26": 1, "2026-08-25": 1, "2026-08-24": 1, "2026-08-23": 1 } }); // missed 2026-08-22
+  const onTrack = mk({ title: "Run", path: "Habits/run.md", log: { "2026-08-28": 1, "2026-08-27": 1, "2026-08-26": 1, "2026-08-25": 1, "2026-08-24": 1, "2026-08-23": 1, "2026-08-22": 1 } });
+  assert.equal(habitsBehind([neglected, oneMiss, onTrack], TODAY, 7), 2);
+});
+
+test("habitsBehind never counts today — a habit not done yet today is still open", () => {
+  const doneEveryPastDay = mk({
+    title: "Read",
+    log: Object.fromEntries(["2026-08-22", "2026-08-23", "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28"].map((d) => [d, 1])),
+  });
+  assert.equal(habitsBehind([doneEveryPastDay], TODAY, 7), 0);
+});
+
+test("habitsBehind ignores vices, paused habits and misses outside the window", () => {
+  const vice = mk({ title: "Smoking", polarity: "avoid", target: 0, log: {} });
+  const paused = mk({ title: "Spanish", active: false, log: {} });
+  const oldMiss = mk({ title: "Read", created: "2026-08-20", log: Object.fromEntries(["2026-08-22", "2026-08-23", "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28"].map((d) => [d, 1])) }); // missed 08-20, 08-21 only
+  assert.equal(habitsBehind([vice, paused, oldMiss], TODAY, 7), 0);
+  assert.equal(habitsBehind([oldMiss], TODAY, 9), 1);
+});
+
+test("backlogItemsFor is habits behind plus the sibling plugins' counts", () => {
+  const neglected = mk({ title: "Spanish", log: {} });
+  assert.equal(backlogItemsFor([neglected], { tasksOverdue: 2, tasksSlipped: 1, fitnessMissed: 3 }, TODAY, 7), 7);
 });

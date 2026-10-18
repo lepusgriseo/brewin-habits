@@ -26,6 +26,7 @@ export class LogDayModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
+    this.modalEl.addClass("brewin-habits-modal");
     const vice = isVice(this.habit);
     contentEl.createEl("h3", { text: `Log a day — ${this.habit.title}` });
     contentEl.createEl("p", {
@@ -55,7 +56,8 @@ export class LogDayModal extends Modal {
         valRow.createEl("label", { text: vice ? "Slipped that day" : "Did it that day", attr: { for: id } });
       } else {
         valRow.createEl("label", { text: "Amount" });
-        const num = valRow.createEl("input", { type: "number", attr: { min: "0", step: String(this.habit.step || 1) } });
+        // A text field with a numeric keypad, not type=number — on iOS that zooms the page on focus.
+        const num = valRow.createEl("input", { type: "text", attr: { inputmode: "numeric" } });
         num.value = String(this.value || 0);
         num.addEventListener("input", () => {
           const n = Number(num.value);

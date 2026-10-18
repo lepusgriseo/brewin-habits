@@ -1,7 +1,7 @@
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 import { BrewinHabitsSettings } from "./settings";
 import { Habit } from "./types";
-import { dueUnmetToday, habitBacklogDays, ExternalBacklog } from "./backlog";
+import { dueUnmetToday, habitBacklogDays, habitsBehind, ExternalBacklog } from "./backlog";
 
 const OWN_FILE = "Habits Backlog.md";
 const TASKS_FILE = "Tasks Backlog.md";
@@ -31,6 +31,11 @@ export class BacklogStore {
     return this.path(OWN_FILE);
   }
 
+  /** The sibling plugins' notes this store reads — a change to one changes the cash-in odds. */
+  get siblingPaths(): string[] {
+    return [this.path(TASKS_FILE), this.path(FITNESS_FILE)];
+  }
+
   private async ensureFolder(): Promise<void> {
     const norm = normalizePath(this.settings.accountabilityFolder);
     if (this.app.vault.getAbstractFileByPath(norm) instanceof TFolder) return;
@@ -48,6 +53,7 @@ export class BacklogStore {
     await this.ensureFolder();
     const lines = [
       "---",
+      "habits_behind: 0",
       "due_unmet_count: 0",
       "backlog_days: 0",
       "generated:",
@@ -68,12 +74,19 @@ export class BacklogStore {
    * otherwise re-trigger the vault-change listener that calls this in the first place).
    */
   async writeOwn(habits: Habit[], dateISO: string): Promise<void> {
+    // `habits_behind` is the backlog figure (each build habit with a missed due-day in the window,
+    // once; today excluded) — Brewin Planner's digest reads it. The other two stay as information:
+    // still due today, and raw missed habit-days.
+    const behind = habitsBehind(habits, dateISO, this.settings.backlogWindowDays);
     const dueUnmet = dueUnmetToday(habits, dateISO);
     const backlogDays = habitBacklogDays(habits, dateISO, this.settings.backlogWindowDays);
     const file = await this.ensureFile();
     const fm = (this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}) as Record<string, unknown>;
-    if (num(fm.due_unmet_count) === dueUnmet && num(fm.backlog_days) === backlogDays) return;
+    if (fm.habits_behind !== undefined && num(fm.habits_behind) === behind && num(fm.due_unmet_count) === dueUnmet && num(fm.backlog_days) === backlogDays) {
+      return;
+    }
     await this.app.fileManager.processFrontMatter(file, (f) => {
+      f.habits_behind = behind;
       f.due_unmet_count = dueUnmet;
       f.backlog_days = backlogDays;
       f.generated = new Date().toISOString();

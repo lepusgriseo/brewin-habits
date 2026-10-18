@@ -1,6 +1,6 @@
 {
   "name": "brewin-habits",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "First-party habit tracker + reward economy for Obsidian",
   "main": "main.js",
   "type": "module",
