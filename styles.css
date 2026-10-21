@@ -265,3 +265,21 @@
 }
 .brewin-hm-legend-item { display: inline-flex; align-items: center; gap: 5px; margin-left: 14px; }
 .brewin-hm-stats { margin-top: 8px; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+
+/* ── Room for Obsidian's phone navigation bar ───────────────────────────────────
+   The floating bar (and the one in auto full screen) is fixed over the bottom of the view rather
+   than below it, and Obsidian only makes room for it in notes and Bases. The room is measured from
+   the bar itself — its float gap plus its height — and drops to nothing while the keyboard is up,
+   when Obsidian moves the bar off screen. A docked bar sits below the view and needs none. Both views
+   scroll as a whole, so the room goes at the end of their scroll range. */
+body.is-phone { --brewin-habits-navbar-room: 0px; }
+body.is-phone.auto-full-screen {
+  --brewin-habits-navbar-room: max(0px, calc(var(--navbar-height, 0px) - var(--keyboard-height, 0px)));
+}
+body.is-phone.is-floating-nav {
+  --brewin-habits-navbar-room: max(0px, calc(var(--navbar-bottom-offset, 0px) + var(--navbar-height, 0px) - var(--keyboard-height, 0px)));
+}
+body.is-phone .brewin-habits,
+body.is-phone .brewin-analytics {
+  padding-bottom: calc(var(--brewin-habits-navbar-room) + 32px);
+}

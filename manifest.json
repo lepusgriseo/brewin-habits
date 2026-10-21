@@ -1,7 +1,7 @@
 {
   "id": "brewin-habits",
   "name": "Brewin Habits",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "minAppVersion": "1.4.0",
   "description": "First-party habit tracker: build habits and vices, streaks, a year heatmap, pausing, and a points-based reward economy with a chance-based cash-in, docked by cross-plugin backlog.",
   "author": "lepusalbus",
