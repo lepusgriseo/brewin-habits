@@ -1,8 +1,8 @@
 // Pure analytics for the heatmap dashboard. No Obsidian imports → unit-testable.
 
 import { addDays, formatISO, parseISO, shortDate } from "./dates";
-import { currentStreak, isBreach, isDueOn, isSatisfied, isVice } from "./habit";
-import { Habit } from "./types";
+import { currentStreak, isBreach, isDueOn, isSatisfied, isVice, valueOn } from "./habit";
+import { Habit, HabitKind } from "./types";
 
 export interface DayScore {
   date: string;
@@ -167,6 +167,82 @@ export function weekHabitReview(
   perHabit.sort((a, b) => a.habit.title.localeCompare(b.habit.title));
 
   return { perHabit, totals, scores };
+}
+
+/** One habit on one day, for the day note. */
+export interface HabitDayRow {
+  path: string;
+  title: string;
+  kind: HabitKind;
+  vice: boolean;
+  /** What was logged that day (binary: 1 = done). */
+  value: number;
+  /** Build: the minimum to hit. Vice: the most allowed. */
+  target: number;
+  unit: string;
+  /** The weekly review's verdict for this one day: pending is today-not-yet or a future day. */
+  verdict: "hit" | "missed" | "pending";
+  /** A vice went over its allowance that day. */
+  slipped: boolean;
+  /** The streak as it stood on that day (as of today, for a future day). */
+  streak: number;
+}
+
+/** The habits due on one day and how each went — `weekHabitReview` over a one-day range. */
+export function dayHabitReview(habits: Habit[], dateISO: string, todayISO: string): HabitDayRow[] {
+  return weekHabitReview(habits, dateISO, dateISO, todayISO).perHabit.map((r) => ({
+    path: r.habit.path,
+    title: r.habit.title,
+    kind: r.habit.kind,
+    vice: isVice(r.habit),
+    value: valueOn(r.habit, dateISO),
+    target: r.habit.target,
+    unit: r.habit.unit,
+    verdict: r.hit ? "hit" : r.missed ? "missed" : "pending",
+    slipped: r.slips > 0,
+    streak: dateISO < todayISO ? currentStreak(r.habit, dateISO) : r.streak,
+  }));
+}
+
+/** One habit over a stretch of days, for the weekly and monthly review notes. */
+export interface HabitRangeRow {
+  path: string;
+  title: string;
+  kind: HabitKind;
+  vice: boolean;
+  /** The weekly review's counts over the range (vice: hit = clean days, slips = days over). */
+  due: number;
+  hit: number;
+  missed: number;
+  slips: number;
+  pending: number;
+  /** The streak as it stood on the range's last day (as of today, while the range is still running). */
+  streak: number;
+}
+
+export interface HabitRangeReview {
+  rows: HabitRangeRow[];
+  totals: HeatStats;
+}
+
+/** Every habit due in [fromISO, toISO] and how it went — `weekHabitReview` over any range. */
+export function rangeHabitReview(habits: Habit[], fromISO: string, toISO: string, todayISO: string): HabitRangeReview {
+  const r = weekHabitReview(habits, fromISO, toISO, todayISO);
+  return {
+    rows: r.perHabit.map((x) => ({
+      path: x.habit.path,
+      title: x.habit.title,
+      kind: x.habit.kind,
+      vice: isVice(x.habit),
+      due: x.due,
+      hit: x.hit,
+      missed: x.missed,
+      slips: x.slips,
+      pending: x.pending,
+      streak: toISO < todayISO ? currentStreak(x.habit, toISO) : x.streak,
+    })),
+    totals: r.totals,
+  };
 }
 
 /**

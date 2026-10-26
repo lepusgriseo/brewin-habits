@@ -159,3 +159,51 @@ test("formatWeekHabitBlock: no active habits → a single italic line", () => {
     { weekLabel: "2026-W37", startISO: WK_FROM, endISO: WK_TO, generatedISO: WK_TODAY });
   assert.match(md, /_No active habits for this week\._/);
 });
+
+// ── dayHabitReview ───────────────────────────────────────────────────────────
+
+import { dayHabitReview } from "../src/analytics.ts";
+
+test("dayHabitReview: the habits due that day, with the week review's verdict for it", () => {
+  const today = "2026-07-10";
+  const walk = mk({ path: "walk.md", title: "Walk", log: { "2026-07-08": 1, "2026-07-09": 1 } });
+  const water = mk({ path: "water.md", title: "Water", kind: "count", target: 8, unit: "glasses", log: { "2026-07-09": 5 } });
+  const gym = mk({ path: "gym.md", title: "Gym", cadence: "FREQ=WEEKLY;BYDAY=MO" }); // 2026-07-09 is a Thursday
+  const beer = mk({ path: "beer.md", title: "Beer", polarity: "avoid", kind: "count", target: 2, log: { "2026-07-09": 4 } });
+
+  const rows = dayHabitReview([walk, water, gym, beer], "2026-07-09", today);
+  assert.deepEqual(
+    rows.map((r) => [r.title, r.value, r.verdict, r.slipped]),
+    [["Beer", 4, "missed", true], ["Walk", 1, "hit", false], ["Water", 5, "missed", false]]
+  );
+  assert.equal(rows.find((r) => r.title === "Walk")!.streak, 2); // as it stood on the 9th
+  assert.equal(rows.find((r) => r.title === "Beer")!.vice, true);
+
+  // Today, not yet done, is pending rather than missed.
+  assert.deepEqual(dayHabitReview([walk], today, today).map((r) => r.verdict), ["pending"]);
+});
+
+// ── rangeHabitReview ─────────────────────────────────────────────────────────
+
+import { rangeHabitReview } from "../src/analytics.ts";
+
+test("rangeHabitReview: the week review's counts over any range, streak as of the range's end", () => {
+  const today = "2026-07-20";
+  const walk = mk({ path: "walk.md", title: "Walk", log: { "2026-07-01": 1, "2026-07-02": 1, "2026-07-03": 1, "2026-07-10": 1 } });
+  const beer = mk({ path: "beer.md", title: "Beer", polarity: "avoid", kind: "count", target: 2, log: { "2026-07-02": 4 } });
+
+  const first = rangeHabitReview([walk, beer], "2026-07-01", "2026-07-03", today);
+  const week = weekHabitReview([walk, beer], "2026-07-01", "2026-07-03", today);
+  assert.deepEqual(first.totals, week.totals);
+  assert.deepEqual(
+    first.rows.map((r) => [r.title, r.due, r.hit, r.missed, r.slips, r.vice]),
+    [["Beer", 3, 2, 1, 1, true], ["Walk", 3, 3, 0, 0, false]]
+  );
+  // The streak is the one standing on 3 July, not today's (which is 0 for Walk).
+  assert.equal(first.rows.find((r) => r.title === "Walk")!.streak, 3);
+
+  // A range still running counts today as pending and the streak as of today.
+  const live = rangeHabitReview([walk], "2026-07-14", "2026-07-20", today);
+  assert.equal(live.rows[0].pending, 1);
+  assert.equal(live.rows[0].streak, week.perHabit.find((r) => r.habit.title === "Walk")!.streak);
+});

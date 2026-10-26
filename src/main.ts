@@ -6,9 +6,9 @@ import { BacklogStore } from "./backlogStore";
 import { HABIT_VIEW_TYPE, HabitView } from "./habitView";
 import { HabitModal } from "./habitModal";
 import { ANALYTICS_VIEW_TYPE, AnalyticsView } from "./analyticsView";
-import { formatWeekHabitBlock, weekHabitReview } from "./analytics";
+import { dayHabitReview, formatWeekHabitBlock, HabitDayRow, HabitRangeReview, rangeHabitReview, weekHabitReview } from "./analytics";
 import { isoWeekOf, todayISO, weekRange } from "./dates";
-import { fillSection } from "./section";
+import { fillSection, isLiveReview } from "./section";
 
 /** Heading the weekly-review command fills. Must match `_Template/Weekly Review.md`. */
 const HABIT_SECTION_HEADING = "### Habits this week";
@@ -19,6 +19,19 @@ export default class BrewinHabitsPlugin extends Plugin {
   rewards!: RewardStore;
   backlog!: BacklogStore;
   private refreshQueued = false;
+
+  /**
+   * Read-only, for notes: `app.plugins.plugins["brewin-habits"].api.day("2026-10-22")` from
+   * dataviewjs — the habits due that day and how each went — and `api.range(from, to)` for a
+   * week or month. The day note (`00_Systems/Scripts/Day/view.js`) and the review notes
+   * (`00_Systems/Scripts/Review/view.js`) are the callers; `version` lets them notice a change of
+   * shape (adding a function, as `range` was in 1.6.0, keeps it).
+   */
+  readonly api = {
+    version: 1,
+    day: (iso: string): HabitDayRow[] => dayHabitReview(this.habits.getHabits(), iso, todayISO()),
+    range: (fromISO: string, toISO: string): HabitRangeReview => rangeHabitReview(this.habits.getHabits(), fromISO, toISO, todayISO()),
+  };
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -154,6 +167,10 @@ export default class BrewinHabitsPlugin extends Plugin {
 
   /** Write a frozen summary of the week's habits (hit / missed / streak) into `file`. */
   async insertWeekHabitSummary(file: TFile): Promise<void> {
+    if (isLiveReview(await this.app.vault.read(file))) {
+      new Notice("This review shows its habits live — nothing to insert. Its 📌 button freezes the week.");
+      return;
+    }
     const week = this.resolveReviewWeek(file);
     if (!week) return;
     const review = weekHabitReview(this.habits.getHabits(), week.start, week.end, todayISO());

@@ -25,6 +25,11 @@ An Obsidian plugin that tracks habits and vices as notes, and pays you in points
   from Brewin Planner and missed sessions from Brewin Fitness, read from sibling notes in a shared
   folder. Past a threshold a cash-in is refused outright. All of it can be switched off.
 - **Weekly review.** A command writes a frozen summary of the week's habits into the review note.
+- **The day note and the reviews.** A read-only `api.day("YYYY-MM-DD")` returns the habits due that
+  day — what was logged, hit / missed / pending, a vice's slip, and the streak as it stood that day.
+  `api.range(from, to)` gives each habit's due, hit, missed and slip counts over any stretch of days,
+  with the streak as it stood at the end, for the weekly and monthly review notes. Both are called from
+  dataviewjs.
 
 ## The notes it reads
 
